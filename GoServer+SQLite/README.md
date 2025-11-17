@@ -1,4 +1,4 @@
-# This directory is one the architect inside the central layer
+# This directory contains one of the architectures within the central layer.
 
 Golang and SQLite work together to create a stable, fast, and reliable server that runs natively on the Raspberry Pi 5, leaving more resources available for the AI agent to operate efficiently.
 
