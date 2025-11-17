@@ -1,20 +1,18 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View , Button, Image } from 'react-native';
+import Bar from './bar'
+import Sensor from './sensorTask'
+import Feature from './featureTask'
 
-export default function App() {
+import { useState } from 'react';
+
+export default function App(){
+  const [state, sState] = useState("sensor");
   return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
-  );
-}
+    <View style={{flex: 1}}>
+      {state == "sensor" ? <Sensor/> : <Feature/>}
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+      <Bar sendBarData={(newState) => {sState(newState)}} />
+    </View>
+  )
+}
