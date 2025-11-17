@@ -134,7 +134,7 @@ func putHTTP(c *gin.Context) {
 }
 
 func connectMQTT(clientID string) mqtt.Client {
-	broker := "tcp://192.168.100.246:1883"
+	broker := "yourTCP"
 
 	opt := mqtt.NewClientOptions()
 	opt.AddBroker(broker)
@@ -223,7 +223,7 @@ func main() {
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000"},
+		AllowOrigins:     []string{"yourIPaddres"},
 		AllowMethods:     []string{"GET", "PUT", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type"},
 		ExposeHeaders:    []string{"Content-Length"},
