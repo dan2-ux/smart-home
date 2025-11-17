@@ -65,6 +65,14 @@ The system is structured into three main layers:
 - Relay
 - Speakers
 
+# Software requirements
+- FREERTOS
+- Ollama
+
+# Communication protocols
+- HTTP
+- MQTT
+
 ## Running Guidance
 ### For Application layer
 Import npm and run the following:
