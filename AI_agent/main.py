@@ -1,239 +1,204 @@
 from typing import TypedDict, List, Annotated
-from langgraph.graph import StateGraph, END ,START
-from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage ,AIMessage
+from langgraph.graph import StateGraph, END, START
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
 from langchain_ollama import ChatOllama
 from langgraph.prebuilt import ToolNode
 from langgraph.graph.message import add_messages
 from langchain_core.tools import tool
 from dotenv import load_dotenv
+
 import json
 from datetime import datetime
-
-#import speech_recognition as sr
-
 import requests
-
-#recognizer = sr.Recognizer()
-
-#import pyttsx3
-
-# voice_model = pyttsx3.init()
-
-# voice_setup = voice_model.getProperty('voices')
-
-# voice_model.setProperty('voice', voice_setup[1].id)
-
-# def speak(text: str, voice : bool):
-#     engine = pyttsx3.init()
-#     voice_setup = engine.getProperty('voices')
-#     voice_choose = voice_setup[1] if voice else voice_setup[0]
-#     engine.setProperty('voice', voice_choose.id)
-#     engine.say(text)
-#     engine.runAndWait()
-#     engine.stop()
-
-# from gtts import gTTS
-# import pygame
-
 import time
 import os
 
-# def speak(text: str, voice: bool = True, language="en", accent="com.au"):
-#     temp_file = "temp.mp3"
-    
-#     speech = gTTS(text=text, lang=language, tld=accent, slow=not voice)
-#     speech.save(temp_file)
+# ================= AUDIO =================
+import speech_recognition as sr
+import sounddevice as sd
+import numpy as np
+from gtts import gTTS
+import pygame
 
-#     pygame.mixer.init()
-#     pygame.mixer.music.load(temp_file)
-#     pygame.mixer.music.play()
+recognizer = sr.Recognizer()
 
-#     while pygame.mixer.music.get_busy():
-#         time.sleep(0.5)
+def listen(seconds=4, samplerate=16000):
+    audio = sd.rec(
+        int(seconds * samplerate),
+        samplerate=samplerate,
+        channels=1,
+        dtype="int16"
+    )
+    sd.wait()
+    return sr.AudioData(audio.tobytes(), samplerate, 2)
 
-#     pygame.mixer.music.stop()
-#     pygame.mixer.quit()
-#     os.remove(temp_file)
+def speak(text, language="en", accent="com.au"):
+    if not text.strip():
+        return
 
+    temp_file = "temp.mp3"
+    tts = gTTS(text=text, lang=language, tld=accent)
+    tts.save(temp_file)
+
+    pygame.mixer.init()
+    pygame.mixer.music.load(temp_file)
+    pygame.mixer.music.play()
+
+    while pygame.mixer.music.get_busy():
+        time.sleep(0.2)
+
+    pygame.mixer.quit()
+    os.remove(temp_file)
+
+# ================= CONFIG =================
 load_dotenv()
 
+BASE_DIR = "/home/pi/Desktop/golang/ai"
+
+try:
+    with open(os.path.join(BASE_DIR, "define.json")) as f:
+        configure = json.load(f)
+    print("✅ Successfully found json file")
+except Exception as e:
+    print("❌ Failed to load json:", e)
+    exit(1)
+
+# ================= TOOLS =================
 @tool
-def time_teller(t : str):
-    """ Time teller function """
-    t = datetime.now().strftime("%H:%M:%S %p")
-    return t
+def time_teller(_: str = ""):
+    """Tell current time"""
+    return datetime.now().strftime("%H:%M:%S")
 
 @tool
-def date_teller(d : str):
-    """ Date , year and month teller function """
-    d = datetime.now().strftime("%d-%m-%Y")
-    return d
+def date_teller(_: str = ""):
+    """Tell current date"""
+    return datetime.now().strftime("%d-%m-%Y")
 
 @tool
 def get_data_1():
-    """Get data from golang server """
-    res = requests.get(configure["server1"])
-    return res.json()
+    """Get sensor data from server"""
+    return requests.get(configure["server1"]).json()
 
-@tool 
+@tool
 def get_data_2():
-    """ Set the data from golang server """
-    res = requests.get(configure["server2"])
-    return res.json()
+    """Get LED data from server"""
+    return requests.get(configure["server2"]).json()
 
-@tool 
+@tool
 def turn_led_on():
-    """ Set the data from golang server """
-    get = requests.get(configure["server2"])
-    newData = get.json()
-
-    newData["ledState"] = "on"
-    res = requests.put(configure["server2"], json=newData)
-    return res.json()
+    """Turn LED on"""
+    data = requests.get(configure["server2"]).json()
+    data["ledState"] = "on"
+    return requests.put(configure["server2"], json=data).json()
 
 @tool
 def turn_led_off():
-    """ Set the data from golang server """
-    get = requests.get(configure["server2"])
-    newData = get.json()
+    """Turn LED off"""
+    data = requests.get(configure["server2"]).json()
+    data["ledState"] = "off"
+    return requests.put(configure["server2"], json=data).json()
 
-    newData["ledState"] = "off"
-    res = requests.put(configure["server2"], json=newData)
-    return res.json()
+tools = [
+    time_teller,
+    date_teller,
+    get_data_1,
+    get_data_2,
+    turn_led_on,
+    turn_led_off,
+]
 
+# ================= MODELS =================
 try:
-    with open("define.json") as F:
-        configure = json.load(F)
-    print("✅Successfully found json file")
-except Exception as e:
-    print("❌Failed to find json file")
-
-tools = [time_teller, date_teller, get_data_1, get_data_2, turn_led_on, turn_led_off]
-get_date = datetime.now().strftime("%Y_%m_%d")
-
-try:
-    tool_model = ChatOllama(model= configure["tool_model"]).bind_tools(tools)
-    talk_model = ChatOllama(model= configure["talk_model"])
+    tool_model = ChatOllama(model=configure["tool_model"]).bind_tools(tools)
     print("✅ AI models are ready")
 except Exception as e:
-    print("❌ AI model Error: ", e)
+    print("❌ Model error:", e)
+    exit(1)
 
+# ================= STATE =================
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
 
-
-try:
-    server1 = configure["server1"]
-    server2 = configure["server2"]
-    res1 = requests.get(server1) 
-    res2 = requests.get(server1) 
-    if res1.status_code == 200 and res2.status_code == 200:
-        print("✅ Connected to server")
-    else :
-        print("❌ Failed to connect to server")
-except Exception as e:
-    print("Error: ", e)
-
-
 def model_call(state: AgentState) -> AgentState:
     system_prompt = SystemMessage(content=f"""
-    You are {configure["name"]}, a helpful and polite home assistant AI. {configure["workflow"]}
+You are {configure["name"]}, a helpful home assistant.
 
-    You have access to the following tools:
-    - **time_teller** — tells the current time
-    - **date_teller** — tells the current date
-    - **get_data_1** — retrieves the current sensor value from golang server.
-    - **get_data_2** — retrieves the current values from golang server.
-    - **turn_led_on** - tool for turning the LED on.
-    - **turn_led_on** - tool for turning the LED off.
+Rules:
+- Call tools only when needed
+- Keep answers short, and straight to the point, don't include unnecessary informations
+- Be friendly and natural
+""")
 
-    **Important behavioral rules:**
-    1. Only call `time_teller` or `date_teller` if the user explicitly asks for the time or date.
-    2. Only call `getData` if the user asks about the LED or its current status.
-    3. Keep all responses short, direct, and natural — no unnecessary words.
-    4. Speak in a friendly and conversational tone, as if you’re talking to someone at home.
-    5. The database consits of temperature, humidity and gas value, if user want to know either of those value call "get_data_1".
-    5. Call "get_data_2" when user want to know the current value of led or other changable things.
-    6. Call "turn_led_on" when user want to turn the LED on.
-    6. Call "turn_led_off" when user want to turn the LED off.
-    """)
-
-
-    # Let model call tools
     response = tool_model.invoke([system_prompt] + state["messages"])
 
-    if hasattr(response, "tool_calls") and response.tool_calls:
-        print("\nAI is making a tool call:")
+    if response.tool_calls:
         for call in response.tool_calls:
-            print(f"→ Tool: {call['name']}, Arguments: {call['args']}")
+            print(f"🔧 Tool call: {call['name']}")
     else:
-        print("\nAI:", response.content.strip())
-        ##speak(response.content)
+        print("AI:", response.content)
+        speak(response.content)
 
     state["messages"].append(response)
     return state
-    
-def should_continue(state: AgentState): 
-    messages = state["messages"]
-    last_message = messages[-1]
-    if last_message.tool_calls: 
-        return "tools"
-    else:
-        return "end"
 
+def should_continue(state: AgentState):
+    return "tools" if state["messages"][-1].tool_calls else "end"
+
+# ================= GRAPH =================
 graph = StateGraph(AgentState)
-graph.add_edge("tools", "our_agent")
 graph.add_node("our_agent", model_call)
-
-tool_node = ToolNode(tools=tools)
-graph.add_node("tools", tool_node)
-
+graph.add_node("tools", ToolNode(tools))
 graph.set_entry_point("our_agent")
-
+graph.add_edge(START, "our_agent")
 graph.add_conditional_edges(
     "our_agent",
     should_continue,
-    {
-        "tools": "tools",
-        "end": END,
-    },
+    {"tools": "tools", "end": END},
 )
-
-graph.add_edge(START, "our_agent")
-graph.add_edge("our_agent", END)
+graph.add_edge("tools", "our_agent")
 
 agent = graph.compile()
 
-tem_history = []
+# ================= LOOP =================
+WAKE_WORD = "hello"
+history = []
 
-#agent.invoke({"messages": [HumanMessage(content= "Hello")]})
+print("🎤 Assistant is running...")
+speak("Listening")
 
 while True:
     try:
-        text = input("\nUser: ")
-        # try:
-        #     with sr.Microphone() as mic:
-        #         print("Listening...")
-        #         recognizer.adjust_for_ambient_noise(mic, duration=0.3)
-        #         audio = recognizer.listen(mic)
+        print("Listening...")
+        audio = listen()
 
-        #         text = recognizer.recognize_google(audio)
-        #         text = text.lower()
+        try:
+            text = recognizer.recognize_google(audio).lower()
+            print("User:", text)
+        except sr.UnknownValueError:
+            continue
 
-        #         print(f"User: {text}")
-
-        # except sr.UnknownValueError:
-        #     recognizer = sr.Recognizer()
-        #     print("Could not understand audio, retrying...")
-        #     continue
-        if text.lower() in ["exit", "close", "end", "goodbye"]:
+        if text in ["exit", "close", "goodbye"]:
             print("Shutting down")
             break
-        tem_history.append(HumanMessage(content= text))
-        result = agent.invoke({"messages": tem_history})
-        tem_history = result["messages"]
 
-    except KeyboardInterrupt as e:
-        print("Keyboard shutdown")
+        if WAKE_WORD not in text:
+            continue
 
-print(f"Shutting down {configure['tool_model']} model and {configure['talk_model']} model")
+        speak("Yes?")
+        audio = listen()
+        try:
+            command = recognizer.recognize_google(audio).lower()
+            print("Command:", command)
+        except sr.UnknownValueError:
+            continue
+
+        history.append(HumanMessage(content=command))
+        result = agent.invoke({"messages": history})
+        history = result["messages"]
+
+    except KeyboardInterrupt:
+        print("\nKeyboard shutdown")
+        break
+
+print("System stopped")
+speak("See you later")
