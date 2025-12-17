@@ -10,27 +10,34 @@ try:
             id INTEGER PRIMARY KEY,
             temp REAL,
             hum REAL,
-            gas INTEGER
+            gas INTEGER,
+            voltage REAL
         )
     """)
     c.execute("""
         CREATE TABLE cData (
               id INTERGER PRIMARY KEY,
-              ledState TEXT
+              ledState TEXT,
+              lightState TEXT
         )
     """)
-    print("\nSuccessfully created table")
+    print("Successfully created table")
 except:
-    print("\nTable exit")
+    print("Table exit")
 
-c.execute("""
-    INSERT INTO sensor (id, temp, hum, gas)
-    VALUES (?, ?, ?, ?)
-""", (1, 0, 0, 0))
 
-c.execute("""
-    INSERT INTO cData (id, ledState) VALUES (?, ?)
-""", (1, "off"))
+try :
+    c.execute("""
+        INSERT INTO sensor (id, temp, hum, gas, voltage)
+        VALUES (?, ?, ?, ?, ?)
+    """, (1, 0, 0, 0, 0))
+
+    c.execute("""
+        INSERT INTO cData (id, ledState, lightState) VALUES (?, ?, ?)
+    """, (1, "off", "off"))
+    print("Successfully enter sample value for database")
+except:
+    print("Failed to put sample value in database")
 
 conn.commit()
 
