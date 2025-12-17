@@ -13,7 +13,7 @@ import (
 )
 
 func connectDatabase() *sql.DB {
-	db, err := sql.Open("sqlite3", "./data.db")
+	db, err := sql.Open("sqlite3", "/home/pi/Desktop/golang/go+sqlite/data.db")
 
 	if err != nil {
 		panic(err)
@@ -22,7 +22,7 @@ func connectDatabase() *sql.DB {
 	return db
 }
 
-func getDatabase() (int, float32, float32, int32) {
+func getDatabase() (int, float32, float32, int32, float32) {
 	db := connectDatabase()
 
 	rows, err := db.Query("SELECT * FROM sensor WHERE id = 1")
@@ -39,18 +39,19 @@ func getDatabase() (int, float32, float32, int32) {
 	var temp float32
 	var hum float32
 	var gas int32
+	var voltage float32
 
 	for rows.Next() {
-		err := rows.Scan(&id, &temp, &hum, &gas)
+		err := rows.Scan(&id, &temp, &hum, &gas, &voltage)
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	return id, temp, hum, gas
+	return id, temp, hum, gas, voltage
 }
 
-func getDatabaseC() string {
+func getDatabaseC() (string, string) {
 	db := connectDatabase()
 
 	rows, err := db.Query("SELECT * FROM cData WHERE id = 1")
@@ -65,47 +66,52 @@ func getDatabaseC() string {
 
 	var id int
 	var ledState string
+	var lightState string
 
 	for rows.Next() {
-		err := rows.Scan(&id, &ledState)
+		err := rows.Scan(&id, &ledState, &lightState)
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	return ledState
+	return ledState, lightState
 }
 
 type dataType struct {
-	ID   int     `json:"id"`
-	TEMP float32 `json:"temp"`
-	HUM  float32 `json:"hum"`
-	GAS  int32   `json:"gas"`
+	ID      int     `json:"id"`
+	TEMP    float32 `json:"temp"`
+	HUM     float32 `json:"hum"`
+	GAS     int32   `json:"gas"`
+	VOLTAGE float32 `json:"voltage"`
 }
 
 func getHTTP(c *gin.Context) {
 
-	id, temp, hum, gas := getDatabase()
+	id, temp, hum, gas, voltage := getDatabase()
 
 	c.IndentedJSON(http.StatusOK, gin.H{
-		"id":   id,
-		"temp": temp,
-		"hum":  hum,
-		"gas":  gas,
+		"id":      id,
+		"temp":    temp,
+		"hum":     hum,
+		"gas":     gas,
+		"voltage": voltage,
 	})
 }
 
 func getHTTPC(c *gin.Context) {
 
-	ledState := getDatabaseC()
+	ledState, lightState := getDatabaseC()
 
 	c.IndentedJSON(http.StatusOK, gin.H{
-		"ledState": ledState,
+		"ledState":   ledState,
+		"lightState": lightState,
 	})
 }
 
 type ledType struct {
-	LEDSTATE string `json:"ledState"`
+	LEDSTATE   string `json:"ledState"`
+	LIGHTSTATE string `json:"lightState"`
 }
 
 func putHTTP(c *gin.Context) {
@@ -119,22 +125,23 @@ func putHTTP(c *gin.Context) {
 
 	db := connectDatabase()
 
-	_, err1 := db.Exec(" UPDATE cData SET ledState = ? WHERE id = 1", newData.LEDSTATE)
+	_, err1 := db.Exec(" UPDATE cData SET ledState = ?, lightState = ? WHERE id = 1", newData.LEDSTATE, newData.LIGHTSTATE)
 
 	if err1 != nil {
 		panic(err1)
 	}
 	pubMQTT()
 
-	ledState := getDatabaseC()
+	ledState, lightState := getDatabaseC()
 
 	c.IndentedJSON(http.StatusOK, gin.H{
-		"ledState": ledState,
+		"ledState":   ledState,
+		"lightState": lightState,
 	})
 }
 
 func connectMQTT(clientID string) mqtt.Client {
-	broker := "yourTCP"
+	broker := "tcp://192.168.100.246:1883"
 
 	opt := mqtt.NewClientOptions()
 	opt.AddBroker(broker)
@@ -181,9 +188,9 @@ var callback mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 
 	_, err1 := db.Exec(`
 		UPDATE sensor 
-		SET temp = ?, hum = ?, gas = ?
+		SET temp = ?, hum = ?, gas = ?, voltage = ?
 		WHERE id = ?`,
-		newValue[0].TEMP, newValue[0].HUM, newValue[0].GAS, newValue[0].ID,
+		newValue[0].TEMP, newValue[0].HUM, newValue[0].GAS, newValue[0].VOLTAGE, newValue[0].ID,
 	)
 
 	if err1 != nil {
@@ -197,10 +204,13 @@ var callback mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 func pubMQTT() {
 	client := connectMQTT("pubMQTT")
 
-	ledState := getDatabaseC()
+	ledState, lightState := getDatabaseC()
 
-	var newData = []ledType{
-		{LEDSTATE: ledState},
+	newData := []ledType{
+		{
+			LEDSTATE:   ledState,
+			LIGHTSTATE: lightState,
+		},
 	}
 
 	dataHolder, _ := json.Marshal(newData)
@@ -223,7 +233,7 @@ func main() {
 	router := gin.Default()
 
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"yourIPaddres"},
+		AllowOrigins:     []string{"http://localhost:3000"},
 		AllowMethods:     []string{"GET", "PUT", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type"},
 		ExposeHeaders:    []string{"Content-Length"},
