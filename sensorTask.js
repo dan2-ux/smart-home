@@ -7,6 +7,7 @@ export default function Sensor(){
     const [temp, sTemp] = useState(null);
     const [hum, sHum] = useState(null);
     const [gas, sGas] = useState(null);
+    const [voltage, sVoltage] = useState(null);
 
     const getData = async () => {
         try{
@@ -15,11 +16,13 @@ export default function Sensor(){
             sTemp(newData.temp)
             sHum(newData.hum)
             sGas(newData.gas)
+            sVoltage(newData.voltage)
         }
         catch(err){
             sTemp("NOT FOUND")
             sHum("NOT FOUND")
             sGas("NOT FOUND")
+            sVoltage("NOT FOUND")
         }
     }
 
@@ -67,9 +70,9 @@ export default function Sensor(){
                         <Text style={{color: gas > 1000 ? "red" : "green", fontWeight: "bold"}}>{gas}</Text>
                     </View>
                     <View style={styles.infoCon}>
-                        {/* <Text style={styles.name}>Unknow</Text>
-                        <Text >3</Text>
-                        <Text >3</Text> */}
+                        <Text style={styles.name}>VOLTAGE</Text>
+                        <Image source={require('./assets/voltage.webp')} style={styles.img} />
+                        <Text style={{color: voltage > 250 ? "red" : "green", fontWeight: "bold"}}>{voltage}</Text>
                     </View>
                 </View>
         </View>
